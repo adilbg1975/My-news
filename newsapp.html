@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Daily News</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#1c1e21;--muted:#6b7280;--accent:#d92d20;--border:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--bg:#121316;--card:#1c1e23;--text:#f1f2f4;--muted:#9ca3af;--border:#2b2e35}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px 8px}
+.top-row{display:flex;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:1.3rem}
+.lang button{border:1px solid var(--border);background:transparent;color:var(--text);padding:5px 10px;font-size:.85rem;cursor:pointer}
+.lang button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#search-form{display:flex;gap:8px;margin:10px 0}
+#search-input{flex:1;min-width:0;padding:10px 12px;font-size:1rem;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)}
+#search-btn{padding:10px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:.95rem;cursor:pointer}
+#topics{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+#topics button{flex:0 0 auto;padding:7px 14px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);font-size:.9rem;cursor:pointer;white-space:nowrap}
+#topics button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+#topics button.main{font-weight:700;border-color:var(--accent)}
+main{max-width:760px;margin:0 auto;padding:14px}
+#updated{color:var(--muted);font-size:.8rem;text-align:center;margin:0 0 12px}
+#status{color:var(--muted);text-align:center;margin:20px 0;line-height:1.6;white-space:pre-wrap}
+.card{display:block;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;text-decoration:none;color:inherit}
+.card:active{opacity:.7}
+.card h2{margin:0 0 8px;font-size:1.05rem;line-height:1.4}
+.meta{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;color:var(--muted)}
+.source{color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top-row">
+    <h1 id="title">My Daily News</h1>
+    <div class="lang">
+      <button id="lang-en" type="button">EN</button>
+      <button id="lang-ar" type="button">عربي</button>
+    </div>
+  </div>
+  <form id="search-form">
+    <input id="search-input" type="search" placeholder="Search news..." autocomplete="off">
+    <button type="submit" id="search-btn">Search</button>
+  </form>
+  <nav id="topics"></nav>
+</header>
+
+<main>
+  <p id="updated"></p>
+  <p id="status"></p>
+  <div id="news"></div>
+</main>
+
+<script>
+window.onerror = function (msg) {
+  document.getElementById("status").textContent = "Error: " + msg;
+};
+
+// ---------- Topics ----------
+var TOPICS = {
+  random:   { en: "Randomized",     ar: "عشوائي" },
+  top:      { en: "Top Stories",    ar: "الأبرز" },
+  world:    { en: "World",          ar: "العالم" },
+  war:      { en: "War & Conflict", ar: "حروب ونزاعات" },
+  politics: { en: "Politics",       ar: "سياسة" },
+  sports:   { en: "Sports",         ar: "رياضة" },
+  business: { en: "Business",       ar: "اقتصاد" },
+  tech:     { en: "Tech",           ar: "تقنية" },
+  science:  { en: "Science",        ar: "علوم" },
+  health:   { en: "Health",         ar: "صحة" },
+  entertain:{ en: "Entertainment",  ar: "ترفيه" }
+};
+
+var RANDOM_POOL = ["war", "politics", "sports", "business", "tech", "science", "health", "entertain", "world"];
+
+var TEXT = {
+  en: { title: "My Daily News", search: "Search news...", btn: "Search",
+        loading: "Loading news...",
+        empty: "No news found. Try another topic or word.",
+        notReady: "The news file is empty. Open your GitHub repository, tap Actions, choose \"Update news\" and tap Run workflow. Then come back in 1 minute.",
+        error: "Could not read the news file. Check your internet and refresh the page.",
+        updated: "Last updated: " },
+  ar: { title: "أخباري اليومية", search: "ابحث في الأخبار...", btn: "بحث",
+        loading: "جارٍ تحميل الأخبار...",
+        empty: "لا توجد أخبار. جرّب موضوعًا أو كلمة أخرى.",
+        notReady: "ملف الأخبار فارغ. افتح مستودع GitHub ثم Actions ثم Update news ثم Run workflow. ثم عد بعد دقيقة.",
+        error: "تعذّر قراءة ملف الأخبار. تحقق من الإنترنت وحدّث الصفحة.",
+        updated: "آخر تحديث: " }
+};
+
+var lang = "en";
+var currentTopic = "random";
+var currentSearch = "";
+var DATA = null;
+try { lang = localStorage.getItem("news-lang") || "en"; } catch (e) {}
+
+var topicsBar   = document.getElementById("topics");
+var newsBox     = document.getElementById("news");
+var statusBox   = document.getElementById("status");
+var updatedBox  = document.getElementById("updated");
+var searchForm  = document.getElementById("search-form");
+var searchInput = document.getElementById("search-input");
+var searchBtn   = document.getElementById("search-btn");
+var titleEl     = document.getElementById("title");
+var btnEn       = document.getElementById("lang-en");
+var btnAr       = document.getElementById("lang-ar");
+
+function shuffle(list) {
+  for (var i = list.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+  }
+  return list;
+}
+
+function formatDate(iso) {
+  var d = new Date(iso);
+  if (!iso || isNaN(d)) return "";
+  return d.toLocaleString(lang === "ar" ? "ar" : "en",
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// ---------- Pick which articles to show ----------
+function pickItems() {
+  var pack = DATA[lang] || {};
+
+  if (currentSearch) {
+    var word = currentSearch.toLowerCase();
+    var seen = {}, found = [];
+    Object.keys(pack).forEach(function (topic) {
+      pack[topic].forEach(function (a) {
+        if (!seen[a.l] && a.t.toLowerCase().indexOf(word) !== -1) {
+          seen[a.l] = true;
+          found.push(a);
+        }
+      });
+    });
+    found.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    return found;
+  }
+
+  if (currentTopic === "random") {
+    var picks = shuffle(RANDOM_POOL.slice()).slice(0, 3);
+    var mix = [];
+    picks.forEach(function (k) { mix = mix.concat((pack[k] || []).slice(0, 8)); });
+    return shuffle(mix);
+  }
+
+  return pack[currentTopic] || [];
+}
+
+// ---------- Show the articles ----------
+function render() {
+  newsBox.innerHTML = "";
+  statusBox.textContent = "";
+
+  if (!DATA) { statusBox.textContent = TEXT[lang].loading; return; }
+  if (!DATA.updated) { statusBox.textContent = TEXT[lang].notReady; return; }
+
+  updatedBox.textContent = TEXT[lang].updated + formatDate(DATA.updated);
+
+  var items = pickItems();
+  if (items.length === 0) { statusBox.textContent = TEXT[lang].empty; return; }
+
+  items.forEach(function (item) {
+    var card = document.createElement("a");
+    card.className = "card";
+    card.href = item.l;
+    card.target = "_blank";
+    card.rel = "noopener";
+
+    var h2 = document.createElement("h2");
+    h2.textContent = item.t;
+
+    var meta = document.createElement("div");
+    meta.className = "meta";
+
+    var src = document.createElement("span");
+    src.className = "source";
+    src.textContent = item.s;
+
+    var time = document.createElement("span");
+    time.textContent = formatDate(item.d);
+
+    meta.appendChild(src);
+    meta.appendChild(time);
+    card.appendChild(h2);
+    card.appendChild(meta);
+    newsBox.appendChild(card);
+  });
+}
+
+// ---------- Read news.json ----------
+function loadData() {
+  statusBox.textContent = TEXT[lang].loading;
+  fetch("news.json?t=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (d) { DATA = d; render(); })
+    .catch(function () { statusBox.textContent = TEXT[lang].error; });
+}
+
+// ---------- Topic buttons ----------
+function drawTopics() {
+  topicsBar.innerHTML = "";
+  Object.keys(TOPICS).forEach(function (key) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = TOPICS[key][lang];
+    if (key === "random") b.classList.add("main");
+    if (key === currentTopic && !currentSearch) b.classList.add("active");
+    b.addEventListener("click", function () {
+      currentTopic = key;
+      currentSearch = "";
+      searchInput.value = "";
+      drawTopics();
+      render();
+      window.scrollTo(0, 0);
+    });
+    topicsBar.appendChild(b);
+  });
+}
+
+// ---------- Language ----------
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  titleEl.textContent = TEXT[lang].title;
+  document.title = TEXT[lang].title;
+  searchInput.placeholder = TEXT[lang].search;
+  searchBtn.textContent = TEXT[lang].btn;
+  btnEn.classList.toggle("active", lang === "en");
+  btnAr.classList.toggle("active", lang === "ar");
+  drawTopics();
+}
+
+function setLanguage(newLang) {
+  lang = newLang;
+  try { localStorage.setItem("news-lang", lang); } catch (e) {}
+  applyLanguage();
+  render();
+}
+
+btnEn.addEventListener("click", function () { setLanguage("en"); });
+btnAr.addEventListener("click", function () { setLanguage("ar"); });
+
+// ---------- Search ----------
+searchForm.addEventListener("submit", function (event) {
+  event.preventDefault();
+  var word = searchInput.value.trim();
+  if (!word) return;
+  currentSearch = word;
+  drawTopics();
+  render();
+});
+
+// ---------- Start ----------
+applyLanguage();
+loadData();
+</script>
+</body>
+</html>
