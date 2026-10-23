@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Daily News</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#1c1e21;--muted:#6b7280;--accent:#d92d20;--border:#e5e7eb}
+@media (prefers-color-scheme:dark){:root{--bg:#121316;--card:#1c1e23;--text:#f1f2f4;--muted:#9ca3af;--border:#2b2e35}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;background:var(--bg);color:var(--text)}
+
+/* ----- top bar ----- */
+header{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--border);padding:10px 14px 8px}
+.top-row{display:flex;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:1.3rem}
+.lang button{border:1px solid var(--border);background:transparent;color:var(--text);padding:5px 10px;font-size:.85rem;cursor:pointer}
+.lang button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+#search-form{display:flex;gap:8px;margin:10px 0}
+#search-input{flex:1;min-width:0;padding:10px 12px;font-size:1rem;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)}
+#search-btn{padding:10px 14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:.95rem;cursor:pointer}
+#topics{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+#topics button{flex:0 0 auto;padding:7px 14px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--text);font-size:.9rem;cursor:pointer;white-space:nowrap}
+#topics button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+#topics button.main{font-weight:700;border-color:var(--accent)}
+
+/* ----- page ----- */
+main{max-width:760px;margin:0 auto;padding:14px}
+#updated{color:var(--muted);font-size:.8rem;text-align:center;margin:0 0 10px}
+#status,.empty{color:var(--muted);text-align:center;margin:20px 0;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.empty:empty{display:none}
+.jump{display:flex;gap:8px;justify-content:center;margin:0 0 4px}
+.jump button{padding:6px 14px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--text);font-size:.85rem;cursor:pointer}
+.sec{display:flex;align-items:center;gap:8px;font-size:1.15rem;margin:22px 0 12px}
+.sec::before{content:"";width:4px;height:1.1em;background:var(--accent);border-radius:2px}
+
+/* ----- news cards (with photo) ----- */
+.card{display:block;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;text-decoration:none;color:inherit}
+.card:active{opacity:.7}
+.thumb{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin-bottom:10px;background:var(--border)}
+.card h2{margin:0 0 8px;font-size:1.05rem;line-height:1.4}
+.meta{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;color:var(--muted)}
+.source{color:var(--accent);font-weight:600}
+#more{display:block;margin:4px auto 6px;padding:10px 20px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--text);font-size:.95rem;cursor:pointer}
+
+/* ----- videos ----- */
+.vgrid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:620px){.vgrid{grid-template-columns:1fr 1fr}}
+.vcard{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.vbox{position:relative;aspect-ratio:16/9;background:#000}
+.vplay{position:absolute;top:0;left:0;width:100%;height:100%;padding:0;border:0;background:#000;cursor:pointer}
+.vplay img{width:100%;height:100%;object-fit:cover;display:block}
+.vicon{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(0,0,0,.65)}
+.vicon::after{content:"";position:absolute;left:22px;top:16px;border-style:solid;border-width:12px 0 12px 19px;border-color:transparent transparent transparent #fff}
+.vbox iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
+.vinfo{padding:10px 12px 12px}
+.vtitle{margin:0 0 8px;font-size:.95rem;line-height:1.4}
+.vlink{color:var(--accent);font-size:.8rem;text-decoration:none}
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="top-row">
+    <h1 id="title">My Daily News</h1>
+    <div class="lang">
+      <button id="lang-en" type="button">EN</button>
+      <button id="lang-ar" type="button">عربي</button>
+    </div>
+  </div>
+  <form id="search-form">
+    <input id="search-input" type="search" placeholder="Search news..." autocomplete="off">
+    <button type="submit" id="search-btn">Search</button>
+  </form>
+  <nav id="topics"></nav>
+</header>
+
+<main>
+  <p id="updated"></p>
+  <p id="status"></p>
+
+  <div class="jump">
+    <button id="go-news" type="button">News</button>
+    <button id="go-videos" type="button">Videos</button>
+  </div>
+
+  <section id="news-section">
+    <h2 class="sec" id="news-title">News</h2>
+    <p class="empty" id="news-empty"></p>
+    <div id="news"></div>
+    <button id="more" type="button" style="display:none"></button>
+  </section>
+
+  <section id="video-section">
+    <h2 class="sec" id="video-title">Videos</h2>
+    <p class="empty" id="video-empty"></p>
+    <div class="vgrid" id="videos"></div>
+  </section>
+</main>
+
+<script>
+window.onerror = function (msg) {
+  document.getElementById("status").textContent = "Error: " + msg;
+};
+
+// ---------- Topics ----------
+var TOPICS = {
+  random:   { en: "Randomized",     ar: "عشوائي" },
+  top:      { en: "Top Stories",    ar: "الأبرز" },
+  india:    { en: "India",          ar: "الهند" },
+  world:    { en: "World",          ar: "العالم" },
+  war:      { en: "War & Conflict", ar: "حروب ونزاعات" },
+  politics: { en: "Politics",       ar: "سياسة" },
+  sports:   { en: "Sports",         ar: "رياضة" },
+  business: { en: "Business",       ar: "اقتصاد" },
+  tech:     { en: "Tech",           ar: "تقنية" },
+  science:  { en: "Science",        ar: "علوم" },
+  health:   { en: "Health",         ar: "صحة" },
+  entertain:{ en: "Entertainment",  ar: "ترفيه" }
+};
+
+// Topics the Randomized button mixes together
+var RANDOM_POOL = ["india", "war", "politics", "sports", "business", "tech", "science", "health", "entertain", "world"];
+
+var TEXT = {
+  en: { title: "My Daily News", search: "Search news...", btn: "Search",
+        loading: "Loading news...",
+        news: "News", videos: "Videos", more: "Show more", youtube: "Open on YouTube",
+        empty: "No news found. Try another topic or word.",
+        noVideos: "No videos for this right now. Try another topic.",
+        noVideosYet: "No videos yet. Run the robot again (Actions, Update news, Run workflow) and refresh.",
+        notReady: "The news file is empty. Open your GitHub repository, tap Actions, choose \"Update news\" and tap Run workflow. Then come back in 1 minute.",
+        error: "Could not read the news file. Check your internet and refresh the page.",
+        updated: "Last updated: " },
+  ar: { title: "أخباري اليومية", search: "ابحث في الأخبار...", btn: "بحث",
+        loading: "جارٍ تحميل الأخبار...",
+        news: "الأخبار", videos: "الفيديو", more: "عرض المزيد", youtube: "فتح في يوتيوب",
+        empty: "لا توجد أخبار. جرّب موضوعًا أو كلمة أخرى.",
+        noVideos: "لا توجد فيديوهات لهذا الموضوع الآن. جرّب موضوعًا آخر.",
+        noVideosYet: "لا توجد فيديوهات بعد. شغّل الروبوت مرة أخرى (Actions ثم Update news ثم Run workflow) ثم حدّث الصفحة.",
+        notReady: "ملف الأخبار فارغ. افتح مستودع GitHub ثم Actions ثم Update news ثم Run workflow. ثم عد بعد دقيقة.",
+        error: "تعذّر قراءة ملف الأخبار. تحقق من الإنترنت وحدّث الصفحة.",
+        updated: "آخر تحديث: " }
+};
+
+var PAGE = 10;               // how many headlines show before "Show more"
+var lang = "en";
+var currentTopic = "random";
+var currentSearch = "";
+var DATA = null;
+var currentNews = [];
+var shown = PAGE;
+try { lang = localStorage.getItem("news-lang") || "en"; } catch (e) {}
+
+function $(id) { return document.getElementById(id); }
+var topicsBar = $("topics"), newsBox = $("news"), videosBox = $("videos"), statusBox = $("status");
+var updatedBox = $("updated"), newsEmpty = $("news-empty"), videoEmpty = $("video-empty"), moreBtn = $("more");
+var searchForm = $("search-form"), searchInput = $("search-input"), searchBtn = $("search-btn");
+var titleEl = $("title"), btnEn = $("lang-en"), btnAr = $("lang-ar");
+
+// ---------- Small helpers ----------
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// Only allow normal web links (blocks javascript: and similar tricks)
+function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+
+function shuffle(list) {
+  for (var i = list.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+  }
+  return list;
+}
+
+function formatDate(iso) {
+  var d = new Date(iso);
+  if (!iso || isNaN(d)) return "";
+  return d.toLocaleString(lang === "ar" ? "ar" : "en",
+    { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// ---------- Choose what to show ----------
+function pickNews(picks) {
+  var pack = DATA[lang] || {};
+
+  if (currentSearch) {
+    var word = currentSearch.toLowerCase();
+    var seen = {}, found = [];
+    Object.keys(pack).forEach(function (topic) {
+      pack[topic].forEach(function (a) {
+        if (!seen[a.l] && a.t.toLowerCase().indexOf(word) !== -1) { seen[a.l] = true; found.push(a); }
+      });
+    });
+    found.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    return found;
+  }
+
+  if (picks) {
+    var mix = [];
+    picks.forEach(function (k) { mix = mix.concat((pack[k] || []).slice(0, 8)); });
+    return shuffle(mix);
+  }
+  return pack[currentTopic] || [];
+}
+
+function pickVideos(picks) {
+  var pack = (DATA.videos && DATA.videos[lang]) || {};
+
+  if (currentSearch) {
+    var word = currentSearch.toLowerCase();
+    var seen = {}, found = [];
+    Object.keys(pack).forEach(function (topic) {
+      pack[topic].forEach(function (v) {
+        if (!seen[v.id] && v.t.toLowerCase().indexOf(word) !== -1) { seen[v.id] = true; found.push(v); }
+      });
+    });
+    found.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+    return found;
+  }
+
+  if (picks) {
+    var mix = [], seen2 = {};
+    picks.forEach(function (k) {
+      (pack[k] || []).slice(0, 4).forEach(function (v) {
+        if (!seen2[v.id]) { seen2[v.id] = true; mix.push(v); }
+      });
+    });
+    return shuffle(mix);
+  }
+  return pack[currentTopic] || [];
+}
+
+// ---------- News cards (with photo) ----------
+function makeNewsCard(item) {
+  var href = safeUrl(item.l);
+  var card = el("a", "card");
+  if (!href) return card;
+  card.href = href;
+  card.target = "_blank";
+  card.rel = "noopener";
+
+  var photo = safeUrl(item.i);
+  if (photo) {
+    var img = document.createElement("img");
+    img.className = "thumb";
+    img.alt = "";
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", function () { img.remove(); });   // photo failed: just hide it
+    img.src = photo;
+    card.appendChild(img);
+  }
+
+  card.appendChild(el("h2", "", item.t));
+  var meta = el("div", "meta");
+  meta.appendChild(el("span", "source", item.s || ""));
+  meta.appendChild(el("span", "", formatDate(item.d)));
+  card.appendChild(meta);
+  return card;
+}
+
+function drawNews() {
+  newsBox.innerHTML = "";
+  newsEmpty.textContent = currentNews.length ? "" : TEXT[lang].empty;
+  currentNews.slice(0, shown).forEach(function (item) { newsBox.appendChild(makeNewsCard(item)); });
+
+  if (shown < currentNews.length) {
+    moreBtn.style.display = "block";
+    moreBtn.textContent = TEXT[lang].more + " (" + (currentNews.length - shown) + ")";
+  } else {
+    moreBtn.style.display = "none";
+  }
+}
+
+moreBtn.addEventListener("click", function () { shown += PAGE; drawNews(); });
+
+// ---------- Videos ----------
+function makeVideoCard(v) {
+  var card = el("div", "vcard");
+  if (!/^[A-Za-z0-9_-]{11}$/.test(v.id || "")) return card;
+
+  var box = el("div", "vbox");
+  var play = el("button", "vplay");
+  play.type = "button";
+  play.setAttribute("aria-label", v.t);
+
+  var img = document.createElement("img");
+  img.alt = "";
+  img.loading = "lazy";
+  img.referrerPolicy = "no-referrer";
+  img.src = "https://i.ytimg.com/vi/" + v.id + "/mqdefault.jpg";
+  play.appendChild(img);
+  play.appendChild(el("span", "vicon"));
+
+  // Tap the picture: the video plays right here
+  play.addEventListener("click", function () {
+    var frame = document.createElement("iframe");
+    frame.src = "https://www.youtube-nocookie.com/embed/" + v.id + "?autoplay=1&playsinline=1&rel=0";
+    frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    frame.allowFullscreen = true;
+    frame.title = v.t;
+    box.innerHTML = "";
+    box.appendChild(frame);
+  });
+  box.appendChild(play);
+  card.appendChild(box);
+
+  var info = el("div", "vinfo");
+  info.appendChild(el("h3", "vtitle", v.t));
+  var meta = el("div", "meta");
+  meta.appendChild(el("span", "source", v.c || ""));
+  meta.appendChild(el("span", "", formatDate(v.d)));
+  info.appendChild(meta);
+
+  var link = el("a", "vlink", TEXT[lang].youtube);
+  link.href = "https://www.youtube.com/watch?v=" + v.id;
+  link.target = "_blank";
+  link.rel = "noopener";
+  var linkRow = el("div");
+  linkRow.style.marginTop = "8px";
+  linkRow.appendChild(link);
+  info.appendChild(linkRow);
+
+  card.appendChild(info);
+  return card;
+}
+
+function drawVideos(list) {
+  videosBox.innerHTML = "";
+  if (!DATA.videos) { videoEmpty.textContent = TEXT[lang].noVideosYet; return; }
+  videoEmpty.textContent = list.length ? "" : TEXT[lang].noVideos;
+  list.forEach(function (v) { videosBox.appendChild(makeVideoCard(v)); });
+}
+
+// ---------- Draw the whole page ----------
+function render() {
+  statusBox.textContent = "";
+  newsBox.innerHTML = "";
+  videosBox.innerHTML = "";
+  newsEmpty.textContent = "";
+  videoEmpty.textContent = "";
+  moreBtn.style.display = "none";
+
+  if (!DATA) { statusBox.textContent = TEXT[lang].loading; return; }
+  if (!DATA.updated) { statusBox.textContent = TEXT[lang].notReady; return; }
+
+  updatedBox.textContent = TEXT[lang].updated + formatDate(DATA.updated);
+
+  var picks = (currentTopic === "random" && !currentSearch)
+    ? shuffle(RANDOM_POOL.slice()).slice(0, 3) : null;
+
+  // keep only headlines that have a normal web link
+  currentNews = pickNews(picks).filter(function (a) { return safeUrl(a.l); });
+  shown = PAGE;
+  drawNews();
+  drawVideos(pickVideos(picks));
+}
+
+// ---------- Read news.json ----------
+function loadData() {
+  statusBox.textContent = TEXT[lang].loading;
+  fetch("news.json?t=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (d) { DATA = d; render(); })
+    .catch(function () { statusBox.textContent = TEXT[lang].error; });
+}
+
+// ---------- Topic buttons ----------
+function drawTopics() {
+  topicsBar.innerHTML = "";
+  Object.keys(TOPICS).forEach(function (key) {
+    var b = el("button", "", TOPICS[key][lang]);
+    b.type = "button";
+    if (key === "random") b.classList.add("main");
+    if (key === currentTopic && !currentSearch) b.classList.add("active");
+    b.addEventListener("click", function () {
+      currentTopic = key;
+      currentSearch = "";
+      searchInput.value = "";
+      drawTopics();
+      render();
+      window.scrollTo(0, 0);
+    });
+    topicsBar.appendChild(b);
+  });
+}
+
+// ---------- Jump buttons (News / Videos) ----------
+function jumpTo(id) {
+  var target = $(id);
+  var y = target.getBoundingClientRect().top + window.pageYOffset - $("top").offsetHeight - 6;
+  window.scrollTo({ top: y, behavior: "smooth" });
+}
+$("go-news").addEventListener("click", function () { jumpTo("news-section"); });
+$("go-videos").addEventListener("click", function () { jumpTo("video-section"); });
+
+// ---------- Language ----------
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  titleEl.textContent = TEXT[lang].title;
+  document.title = TEXT[lang].title;
+  searchInput.placeholder = TEXT[lang].search;
+  searchBtn.textContent = TEXT[lang].btn;
+  $("news-title").textContent = TEXT[lang].news;
+  $("video-title").textContent = TEXT[lang].videos;
+  $("go-news").textContent = TEXT[lang].news;
+  $("go-videos").textContent = TEXT[lang].videos + " ↓";
+  btnEn.classList.toggle("active", lang === "en");
+  btnAr.classList.toggle("active", lang === "ar");
+  drawTopics();
+}
+
+function setLanguage(newLang) {
+  lang = newLang;
+  try { localStorage.setItem("news-lang", lang); } catch (e) {}
+  applyLanguage();
+  render();
+}
+
+btnEn.addEventListener("click", function () { setLanguage("en"); });
+btnAr.addEventListener("click", function () { setLanguage("ar"); });
+
+// ---------- Search ----------
+searchForm.addEventListener("submit", function (event) {
+  event.preventDefault();
+  var word = searchInput.value.trim();
+  if (!word) return;
+  currentSearch = word;
+  drawTopics();
+  render();
+});
+
+// ---------- Start ----------
+applyLanguage();
+loadData();
+</script>
+</body>
+</html>
